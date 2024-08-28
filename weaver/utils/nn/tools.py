@@ -513,7 +513,8 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
             model.zero_grad(set_to_none=True)
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 ### evaluate the model
-                model_output = model(*inputs)                
+                model_output = model(*inputs)
+                # import pdb; pdb.set_trace()           
                 model_output_cat = model_output[:,:num_labels];
                 model_output_reg = model_output[:,num_labels:num_labels+num_targets];
                 model_output_cat = _flatten_preds(model_output_cat,None)
@@ -592,6 +593,10 @@ def train_classreg(model, loss_func, opt, scheduler, train_loader, dev, epoch, s
 
             if steps_per_epoch is not None and num_batches >= steps_per_epoch:
                 break
+
+    ### End of epoch: Print gradient information
+    # print(f"End of Epoch {epoch + 1
+    
 
     ### training summary
     time_diff = time.time() - start_time

@@ -4,6 +4,7 @@ import tqdm
 import time
 import torch
 import pdb
+from torchviz import make_dot
 
 from collections import defaultdict, Counter
 from .metrics import evaluate_metrics
@@ -29,6 +30,27 @@ def _flatten_preds(preds, mask=None, label_axis=1):
     # print('preds', preds.shape, preds)
     return preds
 
+# class GradientStorage:
+#     def __init__(self):
+#         self.before_reversal = {}
+#         self.after_reversal = {}
+
+#     def store_before_reversal(self, name, grad):
+#         self.before_reversal[name] = grad.clone().detach() if grad is not None else None
+
+#     def store_after_reversal(self, name, grad):
+#         self.after_reversal[name] = grad.clone().detach() if grad is not None else None
+
+# def print_gradients_hook(name, grad, gradient_storage, stage):
+#     if stage == "before":
+#         gradient_storage.store_before_reversal(name, grad)
+#     elif stage == "after":
+#         gradient_storage.store_after_reversal(name, grad)
+#     return grad
+
+# def register_hooks(model, gradient_storage, stage):
+#     for name, param in model.named_parameters():
+#         param.register_hook(lambda grad, name=name: print_gradients_hook(name, grad, gradient_storage, stage))
 
 def train_classification_domain(model, loss_func, opt, scheduler, train_loader, dev, epoch, steps_per_epoch=None, grad_scaler=None, tb_helper=None):
     model.train()
@@ -69,7 +91,7 @@ def train_classification_domain(model, loss_func, opt, scheduler, train_loader, 
 
     with tqdm.tqdm(train_loader) as tq:
         for X, y_cat, _, y_domain, _, y_cat_check, y_domain_check in tq:
-            import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
 
             ### input features for the model
             inputs = [X[k].to(dev,non_blocking=True) for k in data_config.input_names]
@@ -140,7 +162,7 @@ def train_classification_domain(model, loss_func, opt, scheduler, train_loader, 
             opt.zero_grad()
             with torch.cuda.amp.autocast(enabled=grad_scaler is not None):
                 model_output = model(*inputs)
-                import pdb; pdb.set_trace()
+                make_dot(model_output, params=dict(list(model.named_parameters())),show_attrs=True,show_saved=True).render("simple_particle_net", format="png")
                 model_output_cat = model_output[:,:num_labels]
                 model_output_domain = model_output[:,num_labels:num_labels+num_labels_domain]
                 model_output_cat = _flatten_preds(model_output_cat,None)
@@ -266,6 +288,18 @@ def train_classification_domain(model, loss_func, opt, scheduler, train_loader, 
     if scheduler and not getattr(scheduler, '_update_per_step', False):
         scheduler.step()
 
+    # # Print gradients after the epoch
+    # if model.grl.gradients:
+    #     print(f"Epoch {epoch+1}: Gradient after reversal:")
+    #     for grad in model.grl.gradients:
+    #         print(grad)
+    # model.grl.gradients = []  # Clear gradients
+
+    # input_tensor, input_grad_before, input_grad_after = model.register_full_backward_hook(full_backward_hook)
+    # print("Input tensor:", input_tensor)
+    # print("Gradient before reversal:", input_grad_before)
+    # print("Gradient after reversal:", input_grad_after)
+
 
 def evaluate_classification_domain(model, test_loader, dev, epoch, for_training=True, loss_func=None, steps_per_epoch=None,
                             eval_metrics=['roc_auc_score', 'roc_auc_score_matrix', 'confusion_matrix'],
@@ -323,7 +357,7 @@ def evaluate_classification_domain(model, test_loader, dev, epoch, for_training=
     start_time = time.time()
     with torch.no_grad():
         with tqdm.tqdm(test_loader) as tq:
-            for X, y_cat, y_domain, Z, y_cat_check, y_domain_check in tq:
+            for X, y_cat, _, y_domain, Z, y_cat_check, y_domain_check in tq:
                 inputs = [X[k].to(dev) for k in data_config.input_names]
                 ### build classification true labels
                 label_cat = y_cat[data_config.label_names[0]].long()
@@ -554,27 +588,27 @@ def evaluate_classification_domain(model, test_loader, dev, epoch, for_training=
     # _logger.info('Evaluation metrics: \n%s', '\n'.join(
     #     ['    - %s: \n%s' % (k, str(v)) for k, v in metric_results.items()]))
 
-    if not for_training:
-        # metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat].squeeze(1),scores_cat[indexes_cat].squeeze(1),eval_metrics=eval_cat_metrics)            
-        metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat].squeeze(),scores_cat[indexes_cat].squeeze(),eval_metrics=eval_cat_metrics)            
-        _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+    # if not for_training:
+        # # metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat].squeeze(1),scores_cat[indexes_cat].squeeze(1),eval_metrics=eval_cat_metrics)            
+        # metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]][indexes_cat].squeeze(),scores_cat[indexes_cat].squeeze(),eval_metrics=eval_cat_metrics)            
+        # _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
+        #     ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
-        for idx, (name,element) in enumerate(labels_domain.items()):
-            # metric_domain_results = evaluate_metrics(element[indexes_domain[name]].squeeze(1),scores_domain[name][indexes_domain[name]].squeeze(1),eval_metrics=eval_cat_metrics)
-            metric_domain_results = evaluate_metrics(element[indexes_domain[name]].squeeze(),scores_domain[name][indexes_domain[name]].squeeze(),eval_metrics=eval_cat_metrics)
-            _logger.info('Evaluation Domain metrics for '+name+' : \n%s', '\n'.join(
-                ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
+        # for idx, (name,element) in enumerate(labels_domain.items()):
+        #     # metric_domain_results = evaluate_metrics(element[indexes_domain[name]].squeeze(1),scores_domain[name][indexes_domain[name]].squeeze(1),eval_metrics=eval_cat_metrics)
+        #     metric_domain_results = evaluate_metrics(element[indexes_domain[name]].squeeze(),scores_domain[name][indexes_domain[name]].squeeze(),eval_metrics=eval_cat_metrics)
+        #     _logger.info('Evaluation Domain metrics for '+name+' : \n%s', '\n'.join(
+        #         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
            
-    else:
-        metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]],scores_cat,eval_metrics=eval_cat_metrics)    
-        _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
-            ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
+    # else:
+    #     metric_cat_results = evaluate_metrics(labels_cat[data_config.label_names[0]],scores_cat,eval_metrics=eval_cat_metrics)    
+    #     _logger.info('Evaluation Classification metrics: \n%s', '\n'.join(
+    #         ['    - %s: \n%s' % (k, str(v)) for k, v in metric_cat_results.items()]))
 
-        for idx, (name,element) in enumerate(labels_domain.items()):
-            metric_domain_results = evaluate_metrics(element,scores_domain[name],eval_metrics=eval_cat_metrics)
-            _logger.info('Evaluation Domain metrics for '+name+' : \n%s', '\n'.join(
-                ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
+    #     for idx, (name,element) in enumerate(labels_domain.items()):
+    #         metric_domain_results = evaluate_metrics(element,scores_domain[name],eval_metrics=eval_cat_metrics)
+    #         _logger.info('Evaluation Domain metrics for '+name+' : \n%s', '\n'.join(
+    #             ['    - %s: \n%s' % (k, str(v)) for k, v in metric_domain_results.items()]))
 
 
     if for_training:
