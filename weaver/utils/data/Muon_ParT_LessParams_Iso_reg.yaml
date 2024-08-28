@@ -17,6 +17,9 @@ new_variables:
    label_tau: (genPartFlav == 15)
    label_heavy: (genPartFlav == 5)
    label_lightfake: (genPartFlav != 1) & (genPartFlav != 15) & (genPartFlav != 5)
+   label_IsoLow: (MuonSelected_LepGood_miniRelIsoCharged[:,0] <= 0.05)
+   label_IsoMedium: (MuonSelected_LepGood_miniRelIsoCharged[:,0] > 0.05) & (MuonSelected_LepGood_miniRelIsoCharged[:,0] <= 0.10)
+   label_IsoHigh: (MuonSelected_LepGood_miniRelIsoCharged[:,0] > 0.10)
    PF_mask : np.isfinite(PF_dzSig)
    SV_mask : np.isfinite(SV_pt)
    Lepton_mask:  ak.ones_like(MuonSelected_LepGood_pt)
@@ -144,7 +147,21 @@ labels:
    ### [option 1] use `simple` for binary/multi-class classification, then `value` is a list of 0-1 labels
    type: simple
    value: [label_lightfake, label_prompt, label_tau, label_heavy]
+   
+# labels_domain:
+#    type: custom
+#    value:
+#      label_domain_iso: [label_IsoLow, label_IsoMedium, label_IsoHigh]
+#    loss_weight:
+#      [1]
 
+targets:
+    type: custom
+    value:
+       MuonSelected_LepGood_theminiRelIsoCharged: MuonSelected_LepGood_miniRelIsoCharged[:,0]
+      #  MuonSelected_LepGood_theminiRelIsoNeutral: MuonSelected_LepGood_miniRelIsoNeutral[:,0]
+    quantile:
+       [-1]
 
 observers:
    - MuonSelected_LepGood_theminiRelIsoCharged
@@ -165,6 +182,7 @@ weights:
       # MuonSelected_LepGood_thept: [5, 99999.]
       # MuonSelected_LepGood_theeta: [-2.4, 2.4]
    reweight_classes: [label_lightfake, label_prompt, label_tau, label_heavy]
+   # reweight_exclude_classes: [label_IsoLow, label_IsoMedium, label_IsoHigh]
    class_weights: [1, 1, 1, 1]
    reweight_threshold: 15
    reweight_hists:
